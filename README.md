@@ -353,6 +353,12 @@ Based on ServiceNow REST API documentation:
 - [ServiceNow Query Parameters](https://docs.servicenow.com/bundle/vancouver-api-reference/page/integrate/inbound-rest/concept/c_TableAPI.html#table-GET)
 - [Encoded Queries](https://docs.servicenow.com/bundle/vancouver-application-development/page/script/server-scripting/concept/c_EncodedQueryStrings.html)
 
+## Documentation
+
+- [API Verification Guide](docs/API_VERIFICATION.md) - Testing the API implementation
+- [Validation Improvements](docs/validation-improvements.md) - Input validation with Zod
+- [Chat Histories](docs/chat-histories/) - Development conversation records
+
 ## Contributing
 
 This is currently a personal project. Contributions, suggestions, and feedback welcome!
@@ -367,3 +373,4 @@ Built with:
 - [Model Context Protocol SDK](https://github.com/modelcontextprotocol)
 - ServiceNow REST API
 - TypeScript & Node.js
+- Zod for runtime validation
