@@ -3,24 +3,59 @@
  * MCP tools for ServiceNow Incident table operations
  */
 
+import { ZodError } from 'zod';
 import { ServiceNowClient } from '../services/servicenow-client.js';
 import { Incident } from '../types/incident.js';
-import { QueryFilter } from '../types/servicenow.js';
+import {
+  IncidentQuerySchema,
+  IncidentGetSchema,
+  IncidentCreateSchema,
+  IncidentUpdateSchema,
+  IncidentDeleteSchema,
+  type IncidentQueryInput,
+  type IncidentGetInput,
+  type IncidentCreateInput,
+  type IncidentUpdateInput,
+  type IncidentDeleteInput,
+} from '../schemas/incident-schemas.js';
 
 const INCIDENT_TABLE = 'incident';
+
+/**
+ * Format Zod validation errors for user-friendly output
+ */
+function formatValidationError(error: ZodError): string {
+  const errors = error.issues.map(err => {
+    const path = err.path.join('.');
+    return `  - ${path ? path + ': ' : ''}${err.message}`;
+  }).join('\n');
+
+  return `Validation Error:\n${errors}`;
+}
 
 /**
  * Query incidents with filters
  */
 export async function incidentQuery(
   client: ServiceNowClient,
-  args: any
+  args: unknown
 ): Promise<string> {
-  const { filter, limit = 100, fields } = args;
+  // Validate input
+  let validatedArgs: IncidentQueryInput;
+  try {
+    validatedArgs = IncidentQuerySchema.parse(args);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new Error(formatValidationError(error));
+    }
+    throw error;
+  }
+
+  const { filter, limit, fields } = validatedArgs;
 
   const results = await client.queryTable<Incident>(
     INCIDENT_TABLE,
-    filter,
+    filter as any, // Zod validated - safe cast
     { limit, fields }
   );
 
@@ -36,9 +71,20 @@ export async function incidentQuery(
  */
 export async function incidentGet(
   client: ServiceNowClient,
-  args: any
+  args: unknown
 ): Promise<string> {
-  const { identifier, fields } = args;
+  // Validate input
+  let validatedArgs: IncidentGetInput;
+  try {
+    validatedArgs = IncidentGetSchema.parse(args);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new Error(formatValidationError(error));
+    }
+    throw error;
+  }
+
+  const { identifier, fields } = validatedArgs;
 
   let incident: Incident;
 
@@ -73,8 +119,19 @@ export async function incidentGet(
  */
 export async function incidentCreate(
   client: ServiceNowClient,
-  args: any
+  args: unknown
 ): Promise<string> {
+  // Validate input
+  let validatedArgs: IncidentCreateInput;
+  try {
+    validatedArgs = IncidentCreateSchema.parse(args);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new Error(formatValidationError(error));
+    }
+    throw error;
+  }
+
   const {
     short_description,
     description,
@@ -86,8 +143,9 @@ export async function incidentCreate(
     assignment_group,
     assigned_to,
     caller_id,
+    instance,
     ...otherFields
-  } = args;
+  } = validatedArgs;
 
   // Build incident data
   const incidentData: Partial<Incident> = {
@@ -119,9 +177,20 @@ export async function incidentCreate(
  */
 export async function incidentUpdate(
   client: ServiceNowClient,
-  args: any
+  args: unknown
 ): Promise<string> {
-  const { identifier, ...updateData } = args;
+  // Validate input
+  let validatedArgs: IncidentUpdateInput;
+  try {
+    validatedArgs = IncidentUpdateSchema.parse(args);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new Error(formatValidationError(error));
+    }
+    throw error;
+  }
+
+  const { identifier, instance, ...updateData } = validatedArgs;
 
   let sysId: string;
 
@@ -157,13 +226,20 @@ export async function incidentUpdate(
  */
 export async function incidentDelete(
   client: ServiceNowClient,
-  args: any
+  args: unknown
 ): Promise<string> {
-  const { identifier, confirm } = args;
-
-  if (!confirm) {
-    return 'Error: Delete operation requires confirmation. Set confirm=true to proceed.';
+  // Validate input
+  let validatedArgs: IncidentDeleteInput;
+  try {
+    validatedArgs = IncidentDeleteSchema.parse(args);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new Error(formatValidationError(error));
+    }
+    throw error;
   }
+
+  const { identifier, confirm } = validatedArgs;
 
   let sysId: string;
   let incidentNumber: string;
@@ -207,27 +283,31 @@ export function getIncidentTools() {
     {
       name: 'incident_query',
       description:
-        'Query ServiceNow incidents with optional filters. Returns a list of incidents matching the criteria.',
+        'Query ServiceNow incidents with optional filters. Returns a list of incidents matching the criteria. EXAMPLES: Find all new critical incidents: {"filter": {"state": "New", "priority": "Critical"}}. Find incidents assigned to a user: {"filter": {"assigned_to": "john.doe"}}. Find recent high priority incidents: {"filter": {"priority": "High"}, "limit": 10}.',
       inputSchema: {
         type: 'object',
         properties: {
           filter: {
             type: 'object',
             description:
-              'Filter criteria as key-value pairs. Examples: {"state": "1"} for New incidents, {"priority": "1", "state": "2"} for Critical incidents In Progress. Common fields: state (1=New, 2=In Progress, 6=Resolved, 7=Closed), priority (1=Critical, 2=High, 3=Moderate, 4=Low), urgency, impact, assignment_group, assigned_to, caller_id, category, short_description',
+              'Filter criteria as key-value pairs. You can use either numeric codes OR human-readable values. Examples: {"state": "New"} or {"state": "1"}, {"priority": "Critical", "state": "In Progress"} or {"priority": "1", "state": "2"}. Common filter fields: state, priority, urgency, impact, assignment_group, assigned_to, caller_id, category, short_description, number',
+            additionalProperties: true,
           },
           limit: {
             type: 'number',
-            description: 'Maximum number of records to return (default: 100)',
+            description: 'Maximum number of records to return (default: 100, max: 1000)',
+            minimum: 1,
+            maximum: 1000,
           },
           fields: {
             type: 'array',
             items: { type: 'string' },
             description:
-              'Specific fields to return. If not specified, returns all fields.',
+              'Specific fields to return. Common fields: number, short_description, state, priority, assigned_to, opened_at, sys_id. If not specified, returns all fields.',
           },
           instance: {
             type: 'string',
+            enum: ['primary', 'dev', 'test', 'prod'],
             description: 'ServiceNow instance to query (if multiple configured)',
           },
         },
@@ -236,7 +316,7 @@ export function getIncidentTools() {
     {
       name: 'incident_get',
       description:
-        'Get a specific incident by incident number (e.g., "INC0010001") or sys_id. Returns full incident details.',
+        'Get a specific incident by incident number or sys_id. Returns full incident details. EXAMPLE: Get incident by number: {"identifier": "INC0010001"}. Get specific fields only: {"identifier": "INC0010001", "fields": ["short_description", "state", "priority"]}.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -244,15 +324,17 @@ export function getIncidentTools() {
             type: 'string',
             description:
               'Incident number (e.g., "INC0010001") or sys_id (32-character hex string)',
+            minLength: 1,
           },
           fields: {
             type: 'array',
             items: { type: 'string' },
             description:
-              'Specific fields to return. If not specified, returns all fields.',
+              'Specific fields to return. Common fields: number, short_description, state, priority, assigned_to, opened_at, work_notes. If not specified, returns all fields.',
           },
           instance: {
             type: 'string',
+            enum: ['primary', 'dev', 'test', 'prod'],
             description: 'ServiceNow instance to query (if multiple configured)',
           },
         },
@@ -262,53 +344,58 @@ export function getIncidentTools() {
     {
       name: 'incident_create',
       description:
-        'Create a new ServiceNow incident. Returns the created incident with its incident number and sys_id.',
+        'Create a new ServiceNow incident. Returns the created incident with its incident number and sys_id. EXAMPLE: Create a high priority incident: {"short_description": "Database connection timeout", "description": "Users unable to access app", "priority": "High", "urgency": "High"}.',
       inputSchema: {
         type: 'object',
         properties: {
           short_description: {
             type: 'string',
-            description: 'Brief description of the incident (required)',
+            description: 'Brief description of the incident (required). Example: "Email server down" or "User cannot login"',
+            minLength: 1,
           },
           description: {
             type: 'string',
-            description: 'Detailed description of the incident',
+            description: 'Detailed description of the incident with more context',
           },
           priority: {
             type: 'string',
+            enum: ['1', '2', '3', '4', '5', 'Critical', 'High', 'Moderate', 'Low', 'Planning'],
             description:
-              'Priority: 1=Critical, 2=High, 3=Moderate, 4=Low, 5=Planning',
+              'Priority level. Use either: "Critical"/"1" (highest), "High"/"2", "Moderate"/"3", "Low"/"4", or "Planning"/"5"',
           },
           urgency: {
             type: 'string',
-            description: 'Urgency: 1=High, 2=Medium, 3=Low',
+            enum: ['1', '2', '3', 'High', 'Medium', 'Low'],
+            description: 'Urgency level. Use either: "High"/"1", "Medium"/"2", or "Low"/"3"',
           },
           impact: {
             type: 'string',
-            description: 'Impact: 1=High, 2=Medium, 3=Low',
+            enum: ['1', '2', '3', 'High', 'Medium', 'Low'],
+            description: 'Impact level. Use either: "High"/"1" (affects many users), "Medium"/"2", or "Low"/"3" (affects few users)',
           },
           category: {
             type: 'string',
-            description: 'Incident category',
+            description: 'Incident category (e.g., "Hardware", "Software", "Network")',
           },
           subcategory: {
             type: 'string',
-            description: 'Incident subcategory',
+            description: 'Incident subcategory for more specific classification',
           },
           assignment_group: {
             type: 'string',
-            description: 'Assignment group sys_id or name',
+            description: 'Assignment group name or sys_id to route the incident',
           },
           assigned_to: {
             type: 'string',
-            description: 'Assigned user sys_id or username',
+            description: 'Assigned user username or sys_id',
           },
           caller_id: {
             type: 'string',
-            description: 'Caller user sys_id or username',
+            description: 'Caller/requester username or sys_id',
           },
           instance: {
             type: 'string',
+            enum: ['primary', 'dev', 'test', 'prod'],
             description: 'ServiceNow instance to use (if multiple configured)',
           },
         },
@@ -318,59 +405,81 @@ export function getIncidentTools() {
     {
       name: 'incident_update',
       description:
-        'Update an existing incident by incident number or sys_id. Provide the fields to update.',
+        'Update an existing incident by incident number or sys_id. Provide only the fields you want to change. EXAMPLES: Update state to in progress: {"identifier": "INC0010001", "state": "In Progress", "work_notes": "Working on this"}. Resolve incident: {"identifier": "INC0010001", "state": "Resolved", "close_notes": "Issue fixed"}.',
       inputSchema: {
         type: 'object',
         properties: {
           identifier: {
             type: 'string',
             description:
-              'Incident number (e.g., "INC0010001") or sys_id to update',
+              'Incident number (e.g., "INC0010001") or sys_id (32-character hex) to update',
+            minLength: 1,
           },
           state: {
             type: 'string',
+            enum: ['1', '2', '3', '6', '7', '8', 'New', 'In Progress', 'On Hold', 'Resolved', 'Closed', 'Canceled'],
             description:
-              'State: 1=New, 2=In Progress, 3=On Hold, 6=Resolved, 7=Closed, 8=Canceled',
+              'State: Use either "New"/"1", "In Progress"/"2", "On Hold"/"3", "Resolved"/"6", "Closed"/"7", or "Canceled"/"8"',
           },
           priority: {
             type: 'string',
+            enum: ['1', '2', '3', '4', '5', 'Critical', 'High', 'Moderate', 'Low', 'Planning'],
             description:
-              'Priority: 1=Critical, 2=High, 3=Moderate, 4=Low, 5=Planning',
+              'Priority: Use either "Critical"/"1", "High"/"2", "Moderate"/"3", "Low"/"4", or "Planning"/"5"',
+          },
+          urgency: {
+            type: 'string',
+            enum: ['1', '2', '3', 'High', 'Medium', 'Low'],
+            description: 'Urgency: Use either "High"/"1", "Medium"/"2", or "Low"/"3"',
+          },
+          impact: {
+            type: 'string',
+            enum: ['1', '2', '3', 'High', 'Medium', 'Low'],
+            description: 'Impact: Use either "High"/"1", "Medium"/"2", or "Low"/"3"',
           },
           short_description: {
             type: 'string',
-            description: 'Brief description',
+            description: 'Brief description of the incident',
           },
           description: {
             type: 'string',
-            description: 'Detailed description',
+            description: 'Detailed description of the incident',
           },
           work_notes: {
             type: 'string',
-            description: 'Work notes (internal comments)',
+            description: 'Work notes (internal comments visible only to IT staff)',
           },
           comments: {
             type: 'string',
-            description: 'Customer-visible comments',
+            description: 'Customer-visible comments (visible to the caller)',
           },
           assignment_group: {
             type: 'string',
-            description: 'Assignment group',
+            description: 'Assignment group name or sys_id',
           },
           assigned_to: {
             type: 'string',
-            description: 'Assigned user',
+            description: 'Assigned user username or sys_id',
           },
           close_code: {
             type: 'string',
-            description: 'Close code (when closing incident)',
+            description: 'Close code/resolution code (required when closing/resolving)',
           },
           close_notes: {
             type: 'string',
-            description: 'Close notes (when closing incident)',
+            description: 'Close notes/resolution notes (required when closing/resolving)',
+          },
+          category: {
+            type: 'string',
+            description: 'Incident category',
+          },
+          subcategory: {
+            type: 'string',
+            description: 'Incident subcategory',
           },
           instance: {
             type: 'string',
+            enum: ['primary', 'dev', 'test', 'prod'],
             description: 'ServiceNow instance to use (if multiple configured)',
           },
         },
@@ -380,20 +489,22 @@ export function getIncidentTools() {
     {
       name: 'incident_delete',
       description:
-        'Delete an incident by incident number or sys_id. Requires confirmation.',
+        'Delete an incident by incident number or sys_id. Requires explicit confirmation. CAUTION: This is a destructive operation. EXAMPLE: Delete incident: {"identifier": "INC0010001", "confirm": true}.',
       inputSchema: {
         type: 'object',
         properties: {
           identifier: {
             type: 'string',
-            description: 'Incident number (e.g., "INC0010001") or sys_id',
+            description: 'Incident number (e.g., "INC0010001") or sys_id (32-character hex)',
+            minLength: 1,
           },
           confirm: {
             type: 'boolean',
-            description: 'Must be set to true to confirm deletion',
+            description: 'REQUIRED: Must be set to true to confirm deletion. This prevents accidental deletions.',
           },
           instance: {
             type: 'string',
+            enum: ['primary', 'dev', 'test', 'prod'],
             description: 'ServiceNow instance to use (if multiple configured)',
           },
         },

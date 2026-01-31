@@ -3,17 +3,23 @@
  */
 
 import dotenv from 'dotenv';
+import { ZodError } from 'zod';
 import {
   ServiceNowConfig,
   ServiceNowInstanceConfig,
   InstanceName,
 } from '../types/config.js';
+import {
+  ServiceNowInstanceConfigSchema,
+  ServiceNowConfigSchema,
+  DefaultInstanceSchema,
+} from '../schemas/config-schemas.js';
 
 // Load environment variables from .env file
 dotenv.config();
 
 /**
- * Load instance configuration from environment variables
+ * Load instance configuration from environment variables with validation
  */
 function loadInstanceConfig(
   prefix: string
@@ -26,11 +32,20 @@ function loadInstanceConfig(
     return undefined;
   }
 
-  return {
-    url: url.replace(/\/$/, ''), // Remove trailing slash
-    username,
-    password,
-  };
+  try {
+    // Validate the instance configuration
+    return ServiceNowInstanceConfigSchema.parse({
+      url,
+      username,
+      password,
+    });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const errors = error.issues.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
+      throw new Error(`Invalid configuration for ${prefix}: ${errors}`);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -45,15 +60,14 @@ export function loadConfig(): ServiceNowConfig {
   const test = loadInstanceConfig('SERVICENOW_TEST');
   const prod = loadInstanceConfig('SERVICENOW_PROD');
 
-  // Determine default instance
+  // Determine default instance with validation
   const defaultInstanceEnv = process.env.SERVICENOW_DEFAULT_INSTANCE;
-  let defaultInstance: InstanceName = 'primary';
+  let defaultInstance: InstanceName;
 
-  if (
-    defaultInstanceEnv &&
-    ['primary', 'dev', 'test', 'prod'].includes(defaultInstanceEnv)
-  ) {
-    defaultInstance = defaultInstanceEnv as InstanceName;
+  try {
+    defaultInstance = DefaultInstanceSchema.parse(defaultInstanceEnv);
+  } catch {
+    defaultInstance = 'primary';
   }
 
   const config: ServiceNowConfig = {
@@ -66,25 +80,16 @@ export function loadConfig(): ServiceNowConfig {
     defaultInstance,
   };
 
-  // Validate that at least one instance is configured
-  const hasAnyInstance = Object.values(config.instances).some(
-    (instance) => instance !== undefined
-  );
-
-  if (!hasAnyInstance) {
-    throw new Error(
-      'No ServiceNow instance configured. Please set SERVICENOW_INSTANCE_URL, SERVICENOW_USERNAME, and SERVICENOW_PASSWORD environment variables.'
-    );
+  // Validate the complete configuration using Zod
+  try {
+    return ServiceNowConfigSchema.parse(config);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const errors = error.issues.map(err => err.message).join('. ');
+      throw new Error(`Configuration validation failed: ${errors}`);
+    }
+    throw error;
   }
-
-  // Validate that default instance exists
-  if (!config.instances[defaultInstance]) {
-    throw new Error(
-      `Default instance "${defaultInstance}" is not configured. Please configure it or change SERVICENOW_DEFAULT_INSTANCE.`
-    );
-  }
-
-  return config;
 }
 
 /**
