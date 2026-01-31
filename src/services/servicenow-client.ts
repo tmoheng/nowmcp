@@ -156,7 +156,8 @@ export class ServiceNowClient {
   }
 
   /**
-   * Update an existing record
+   * Update an existing record (partial update)
+   * Uses PATCH for updating only specified fields
    */
   async updateRecord<T extends ServiceNowRecord = ServiceNowRecord>(
     tableName: string,
@@ -164,7 +165,7 @@ export class ServiceNowClient {
     data: Partial<T>
   ): Promise<T> {
     try {
-      const response = await this.axiosInstance.put<
+      const response = await this.axiosInstance.patch<
         ServiceNowSingleResponse<T>
       >(`/table/${tableName}/${sysId}`, data);
 

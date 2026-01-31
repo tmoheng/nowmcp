@@ -15,6 +15,14 @@ import {
 import { loadConfig, getInstanceConfig } from './config/index.js';
 import { ServiceNowClient } from './services/servicenow-client.js';
 import { InstanceName } from './types/config.js';
+import {
+  getIncidentTools,
+  incidentQuery,
+  incidentGet,
+  incidentCreate,
+  incidentUpdate,
+  incidentDelete,
+} from './tools/incident-tools.js';
 
 /**
  * ServiceNow MCP Server
@@ -76,56 +84,62 @@ class ServiceNowMCPServer {
    */
   private setupHandlers() {
     // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'servicenow_test_connection',
-          description:
-            'Test connection to a ServiceNow instance to verify credentials and connectivity',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              instance: {
-                type: 'string',
-                description:
-                  'Instance name (primary, dev, test, prod). If not specified, uses the default instance.',
-                enum: Array.from(this.clients.keys()),
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      const availableInstances = Array.from(this.clients.keys());
+
+      return {
+        tools: [
+          {
+            name: 'servicenow_test_connection',
+            description:
+              'Test connection to a ServiceNow instance to verify credentials and connectivity',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instance: {
+                  type: 'string',
+                  description:
+                    'Instance name (primary, dev, test, prod). If not specified, uses the default instance.',
+                  enum: availableInstances,
+                },
               },
             },
           },
-        },
-        {
-          name: 'servicenow_query',
-          description:
-            'Query any ServiceNow table with filters. This is a generic tool for advanced users.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              table: {
-                type: 'string',
-                description:
-                  'ServiceNow table name (e.g., "incident", "sc_req_item", "sc_task")',
+          {
+            name: 'servicenow_query',
+            description:
+              'Query any ServiceNow table with filters. This is a generic tool for advanced users.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                table: {
+                  type: 'string',
+                  description:
+                    'ServiceNow table name (e.g., "incident", "sc_req_item", "sc_task")',
+                },
+                filter: {
+                  type: 'object',
+                  description:
+                    'Filter criteria as key-value pairs. Example: {"state": "New", "priority": "1"}',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of records to return (default: 100)',
+                },
+                instance: {
+                  type: 'string',
+                  description: 'Instance name (if multiple instances configured)',
+                  enum: availableInstances,
+                },
               },
-              filter: {
-                type: 'object',
-                description:
-                  'Filter criteria as key-value pairs. Example: {"state": "New", "priority": "1"}',
-              },
-              limit: {
-                type: 'number',
-                description: 'Maximum number of records to return (default: 100)',
-              },
-              instance: {
-                type: 'string',
-                description: 'Instance name (if multiple instances configured)',
-                enum: Array.from(this.clients.keys()),
-              },
+              required: ['table'],
             },
-            required: ['table'],
           },
-        },
-      ],
-    }));
+          // Incident Management Tools
+          ...getIncidentTools(),
+        ],
+      };
+    });
 
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -138,6 +152,32 @@ class ServiceNowMCPServer {
 
           case 'servicenow_query':
             return await this.handleQuery(args);
+
+          // Incident Management Tools
+          case 'incident_query': {
+            const client = this.getClient((args as any)?.instance);
+            return await this.handleIncidentTool(() => incidentQuery(client, args));
+          }
+
+          case 'incident_get': {
+            const client = this.getClient((args as any)?.instance);
+            return await this.handleIncidentTool(() => incidentGet(client, args));
+          }
+
+          case 'incident_create': {
+            const client = this.getClient((args as any)?.instance);
+            return await this.handleIncidentTool(() => incidentCreate(client, args));
+          }
+
+          case 'incident_update': {
+            const client = this.getClient((args as any)?.instance);
+            return await this.handleIncidentTool(() => incidentUpdate(client, args));
+          }
+
+          case 'incident_delete': {
+            const client = this.getClient((args as any)?.instance);
+            return await this.handleIncidentTool(() => incidentDelete(client, args));
+          }
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -201,6 +241,21 @@ class ServiceNowMCPServer {
         {
           type: 'text',
           text: `Found ${results.length} record(s) in table "${table}":\n\n${JSON.stringify(results, null, 2)}`,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Handle incident tools (generic wrapper)
+   */
+  private async handleIncidentTool(handler: () => Promise<string>) {
+    const result = await handler();
+    return {
+      content: [
+        {
+          type: 'text',
+          text: result,
         },
       ],
     };

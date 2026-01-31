@@ -41,6 +41,7 @@ export interface ServiceNowErrorResponse {
 
 /**
  * Query operator types
+ * Based on ServiceNow encoded query operators
  */
 export type QueryOperator =
   | '='
@@ -54,7 +55,9 @@ export type QueryOperator =
   | 'ENDSWITH'
   | 'CONTAINS'
   | 'IN'
-  | 'NOT IN';
+  | 'NOT IN'
+  | 'ISEMPTY'
+  | 'ISNOTEMPTY';
 
 /**
  * Query field value - can be simple or complex

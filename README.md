@@ -55,6 +55,25 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 Restart Claude Desktop, and you should see ServiceNow tools available!
 
+## ⚠️ Testing Status
+
+**This project has NOT yet been tested against a live ServiceNow instance.**
+
+The implementation is based on ServiceNow REST API documentation and follows standard patterns, but has not been validated with actual ServiceNow credentials or data. Testing with a ServiceNow instance is needed before production use.
+
+**Completed Features (Untested):**
+- ✅ Multi-instance configuration
+- ✅ ServiceNow REST API client with Basic Auth
+- ✅ Simplified query builder
+- ✅ Incident management tools (query, get, create, update, delete)
+- ✅ Connection testing utility
+
+**What's Needed:**
+- Access to a ServiceNow instance (developer instance or sandbox)
+- Service account credentials
+- Validation of all incident operations
+- Error handling verification
+
 ## Design Philosophy
 
 **Table-Specific Tools**: We provide dedicated tools for each ServiceNow table type (Incidents, RITMs, SC-Tasks, etc.) rather than generic tools. This approach:
@@ -120,40 +139,42 @@ Restart Claude Desktop, and you should see ServiceNow tools available!
 
 ## MCP Tools
 
-### Incident Management
-- `incident_query` - Query incidents with filters
-- `incident_get` - Get specific incident by number or sys_id
-- `incident_create` - Create a new incident
-- `incident_update` - Update an existing incident
-- `incident_delete` - Delete an incident (if permissions allow)
+### Currently Implemented ✅
 
-### Requested Items (RITM)
+#### Incident Management (Phase 3)
+- ✅ `incident_query` - Query incidents with filters
+- ✅ `incident_get` - Get specific incident by number or sys_id
+- ✅ `incident_create` - Create a new incident
+- ✅ `incident_update` - Update an existing incident
+- ✅ `incident_delete` - Delete an incident (if permissions allow)
+
+#### Generic Tools
+- ✅ `servicenow_test_connection` - Test connection to ServiceNow instance
+- ✅ `servicenow_query` - Query any table by name (advanced users)
+
+### Planned (Not Yet Implemented) 📋
+
+#### Requested Items (RITM) - Phase 4
 - `ritm_query` - Query requested items
 - `ritm_get` - Get specific RITM
 - `ritm_update` - Update RITM status/fields
 - `ritm_create` - Create new RITM
 
-### Service Catalog Tasks
+#### Service Catalog Tasks - Phase 5
 - `sc_task_query` - Query catalog tasks
 - `sc_task_get` - Get specific task
 - `sc_task_update` - Update task
 - `sc_task_create` - Create new task
 
-### Variable Item Tasks (VIT)
+#### Variable Item Tasks (VIT) - Phase 6
 - `vit_query` - Query variable item tasks
 - `vit_get` - Get specific VIT
 - `vit_update` - Update VIT
 
-### IPT (Integration Process Tasks)
+#### IPT (Integration Process Tasks) - Phase 6
 - `ipt_query` - Query IPTs
 - `ipt_get` - Get specific IPT
 - `ipt_update` - Update IPT
-
-### Generic Operations (for future extensibility)
-- `generic_query` - Query any table by name (advanced users)
-- `generic_get_record` - Get any record by sys_id
-- `generic_create_record` - Create record in any table
-- `generic_update_record` - Update any record
 
 ## Configuration
 
@@ -232,12 +253,13 @@ Add to VSCode settings or `.claude/config.json`:
 - [x] Multi-instance support
 - [x] Request logging and debugging
 
-### Phase 3: Incident Management Tools
-- [ ] incident_query implementation
-- [ ] incident_get implementation
-- [ ] incident_create implementation
-- [ ] incident_update implementation
-- [ ] Tool testing and validation
+### Phase 3: Incident Management Tools ✅ COMPLETE (NOT YET TESTED)
+- [x] incident_query implementation
+- [x] incident_get implementation
+- [x] incident_create implementation
+- [x] incident_update implementation
+- [x] incident_delete implementation
+- [ ] Tool testing and validation (requires ServiceNow instance)
 
 ### Phase 4: RITM Tools
 - [ ] ritm_query implementation
